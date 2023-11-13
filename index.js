@@ -75,7 +75,7 @@ async function errorVal() {
                 }
                 else if (isNaN(new Date(rowData[4]).getTime())) {
                     console.error("Upload_Date in Row " + rows +  " is invalid: " + rowData[4]);
-                    reject;
+                    reject();
                 }
                 else if (!Number.isInteger(parseFloat(rowData[5]))) {
                     console.error("Title_Code in Row " + rows +  " is invalid: " + rowData[5]);
@@ -135,7 +135,7 @@ async function sendData() {
             from: 'bsleung@ucdavis.edu',
             to: 'iet-request@ucdavis.edu',
             subject: 'Error Notification For Fetch Request',
-            text: 'Today, an error was found when attempting to complete the following fetch request(s):' + errors
+            text: 'Today, an error was found when attempting to complete the following fetch request(s):' + errors.join(', ')
         };
         transporter.sendMail(mail);  // sends mail with errors
         throw new Error("Errors occured during fetch request");
