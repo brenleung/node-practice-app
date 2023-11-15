@@ -1,5 +1,11 @@
 const fs = require('fs');
 const csv = require('csv-parser');  // allows parsing of csv data
+
+const express = require('express');  // add-on to allow for incoming requests
+const app = express();
+const port = process.env.PORT || 3000
+app.use(express.json());  // allow for parsing JSON in incoming requests
+
 var nodemailer = require('nodemailer');
 
 var transporter = nodemailer.createTransport({
@@ -15,10 +21,26 @@ let totData = [];
 
 let fileName = "./Sample_Test_File.csv";  // this filename is a placeholder for whatever input the user has
 
-async function read() {
+app.get('/parse-csv', (req, res) => {
+    res.send("Sample text");
+})
+
+app.post('/parse-csv', async (req, res) => {  // waits for request that contains filename
+    const fileName = JSON.stringify(req);
+
     try {
+        await read(fileName);
+        return res.send("File processed. Check email for full results.");
+    } catch {
+        return res.send("File was not properly processed. An error occurred.");
+    }
+})
+
+async function read(fileName) {
+    try {
+        // 4a. Validate input file is in correct file format e.g. sample_file.csv.
         if (!fileName.endsWith('.csv')) {
-            console.error("ERROR: File must end with .csv");  // error if file inputted does not end with .csv
+            console.error("ERROR: File must end with .csv");
             return;
         }
 
@@ -52,7 +74,7 @@ async function errorVal() {
                 const rowData = Object.values(data);  // turn into array that can be parsed
                 totData.push(data);
 
-                // condition 3
+                // 4d. Validate data for each row record is valid if not, display the offending error.
                 if (rowData.length != 7) {
                     console.error("Row " + rows + " is invalid. Each row must contain 7 entries.");
                     reject();
@@ -89,7 +111,7 @@ async function errorVal() {
             .on('headers', (headerList) => {
                 headers.push(...headerList);
 
-                // condition 2
+                // 4c. Validate correct header(column) file fields names.
                 if (headers.length !== correctHeaders.length) {
                     console.error("ERROR: headers of csv are incorrect");
                     reject();
@@ -102,12 +124,14 @@ async function errorVal() {
                 }
             })
             .on('end', () => {
-                if (rows == 0) {  // condition 1
+                // 4b. Validate Uploaded data file is not empty / blank.
+                if (rows == 0) { 
                     console.error("ERROR: file must not be empty");
                     reject();
                 }
 
-                if (rows > N) {  // condition 4
+                // 4e. Validate data file is not more than N records. e.g. N=10.
+                if (rows > N) { 
                     console.error("ERROR: input has a larger amount of rows than allowed");
                     reject();
                 }
@@ -118,18 +142,29 @@ async function errorVal() {
 
 async function sendData() {
     let errors = [];
-    const url = 'https://ucdavis-iet.com/sample-endpoint-url';
-    for (let i = 0; i < totData.length; i++) {  // sends each row to api
+    for (let i = 0; i < totData.length; i++) {
         try {
-            const response = await fetch(url, {
+            // 5a. Authenticate to another API enabled backend environment. Feel free to use a placeholder (not a real one) endpoint url (https://ucdavis-iet.com/sample-endpoint-url) in your code.
+            const response = await fetch('https://ucdavis-iet.com/sample-endpoint-url', {
+                // 5b. Send each processed row record to the API using either GET / POST.
                 method: 'POST',
+                headers: {
+                    'Content-Type': "application/json",
+                    'authorization': ('Bearer ' + 'sample-api-key')
+                },
                 body: JSON.stringify(totData[i]),
             });
+
+            // 6a. Verify Success / Error for all records.
+            if (!response.ok) {
+                errors.push(`Error found at Row ${i+1} with the following error: ${response.statusText}`);
+            }
         } catch (error) {
-            errors.push(`Error found at Row ${i+1} with the following error: ${error.message}`);  // if there is an error, add to array
+            errors.push(`Error found at Row ${i+1} with the following error: ${error.message}`);
         }
     }
 
+    // 6c. Generate & send an error notification email to system admin for any failed records if any. (triggers if error array has anything inside of it)
     if (errors.length != 0) {
         var mail = {
             from: 'bsleung@ucdavis.edu',
@@ -141,14 +176,17 @@ async function sendData() {
         throw new Error("Errors occured during fetch request");
     }
 
+    // 6b. Send Error Notification to a system admin email upon successful completion.
     var mail = {
         from: 'bsleung@ucdavis.edu',
         to: 'iet-request@ucdavis.edu',
         subject: 'Accept Notification For Fetch Request',
         text: 'Upon completion of the fetch request(s) for the inputted CSV file, no errors were found.'
     };
-    transporter.sendMail(mail);  // sends mail with confirmation of success
+    transporter.sendMail(mail);
     return;
 }
 
-read()
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
